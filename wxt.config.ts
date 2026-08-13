@@ -7,6 +7,13 @@ export default defineConfig({
   vite: () => ({
     plugins: [tailwindcss()],
   }),
+  webExt: {
+    // Set WXT_NO_BROWSER=1 to skip auto-launching a browser (e.g. if
+    // web-ext can't drive the one you have installed — sandboxed
+    // flatpak/snap browsers are a common case). The dev server still
+    // runs and rebuilds; load .output/chrome-mv3-dev unpacked yourself.
+    disabled: !!process.env.WXT_NO_BROWSER,
+  },
   manifest: {
     name: "ExtSentinel",
     description:
