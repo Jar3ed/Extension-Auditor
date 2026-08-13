@@ -125,3 +125,23 @@ them like a real API contract:
   states, README finished, permission-justification section written.
 - **Week 4** (stretch) — Optional CRX deep-scan feature, demo recording,
   writeup of the threat model and design tradeoffs for your portfolio.
+
+## Next up
+
+Bootstrap, both role builds, the merge, and the post-merge bug fixes
+(single-flight scan guard, alarm error handling, batched storage writes,
+scan-interval-to-alarm wiring) are all done and verified end to end on
+`main`. Next session, split like this — both self-contained, no
+`src/shared/**` coordination needed for either:
+
+- **Frontend** — "Last scanned" feedback near the Scan button (right now
+  a successful re-scan that finds nothing new looks identical to the
+  button doing nothing, which caused real confusion during testing).
+  Then start on permission hover-tooltips (already listed as planned in
+  the README) — hovering a permission in the drill-down view explains
+  what it actually lets an extension do.
+- **Backend** — Toolbar badge count (`chrome.action.setBadgeText`),
+  showing the number of unreviewed permission changes. Set it after a
+  scan finds changes; clear it when a `GET_LATEST_SCAN` message comes in
+  (i.e. whenever the popup opens) rather than adding a new message type
+  for "mark as seen" — keeps this out of the shared contract entirely.
