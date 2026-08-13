@@ -1,16 +1,45 @@
 /**
  * Scanning logic.
  *
- * TODO: Use chrome.management.getAll() to enumerate installed extensions
- * and build an ExtensionSnapshot[] for the current state of the system.
- * TODO: Score each extension via riskScorer, and persist the result via
- * storage.ts.
- * TODO: Called on an alarm interval (see entrypoints/background.ts) and
- * on-demand via the TRIGGER_SCAN runtime message.
+ * Wraps chrome.management.getAll() and maps the result into
+ * ExtensionSnapshot[], excluding this extension itself. riskScore/riskTier
+ * are left as placeholders here — riskScorer.ts fills those in as a second
+ * pass (see entrypoints/background.ts, which orchestrates scan -> diff ->
+ * score -> save).
  */
 
-import type { ScanResult } from "../shared/types";
+import type { ExtensionSnapshot } from "../shared/types";
 
-export async function runScan(): Promise<ScanResult> {
-  throw new Error("TODO: not implemented");
+const PLACEHOLDER_RISK: Pick<ExtensionSnapshot, "riskScore" | "riskTier"> = {
+  riskScore: 0,
+  riskTier: "low",
+};
+
+export async function scanInstalledExtensions(): Promise<ExtensionSnapshot[]> {
+  const [all, self] = await Promise.all([
+    chrome.management.getAll(),
+    chrome.management.getSelf(),
+  ]);
+
+  return all
+    .filter((extension) => extension.id !== self.id)
+    .map(
+      (extension): ExtensionSnapshot => ({
+        id: extension.id,
+        name: extension.name,
+        version: extension.version,
+        permissions: extension.permissions,
+        hostPermissions: extension.hostPermissions,
+        installType: extension.installType,
+        enabled: extension.enabled,
+        // NOTE: chrome.management.ExtensionInfo does not document a
+        // manifestVersion field as of @types/chrome ^0.2.5 — this line may
+        // not type-check. Flagged for discussion (see PR/commit message);
+        // this touches the shared ExtensionSnapshot contract's assumptions,
+        // not just this file.
+        manifestVersion: (extension as unknown as { manifestVersion?: number })
+          .manifestVersion ?? 3,
+        ...PLACEHOLDER_RISK,
+      }),
+    );
 }
