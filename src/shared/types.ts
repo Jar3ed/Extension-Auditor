@@ -15,7 +15,11 @@ export interface ExtensionSnapshot {
   version: string;
   permissions: string[];
   hostPermissions: string[];
-  installType: chrome.management.ExtensionInstallType;
+  // Template-literal form (not the bare enum) because chrome.management's
+  // own ExtensionInfo.installType is typed this way — matching it means
+  // real API results and plain string literals ("normal", etc.) both
+  // satisfy this without a cast.
+  installType: `${chrome.management.ExtensionInstallType}`;
   enabled: boolean;
   manifestVersion: number;
   riskScore: number;
