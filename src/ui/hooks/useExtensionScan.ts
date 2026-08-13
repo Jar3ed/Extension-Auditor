@@ -7,7 +7,7 @@
  * needs to change to swap mock data for the real thing.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { RuntimeMessage, RuntimeResponse } from "../../shared/messages";
 import type { ScanResult } from "../../shared/types";
 import { mockScanResult } from "../mockData";
@@ -28,8 +28,6 @@ async function sendRuntimeMessage(
   return chrome.runtime.sendMessage(message);
 }
 
-let mockScanInFlight = false;
-
 async function mockSendMessage(
   message: RuntimeMessage,
 ): Promise<RuntimeResponse> {
@@ -39,16 +37,13 @@ async function mockSendMessage(
     case "GET_LATEST_SCAN":
       return { type: "SCAN_RESULT", payload: mockScanResult };
 
-    case "TRIGGER_SCAN": {
-      if (mockScanInFlight) {
-        return { type: "SCAN_IN_PROGRESS" };
-      }
-      mockScanInFlight = true;
-      setTimeout(() => {
-        mockScanInFlight = false;
-      }, MOCK_SCAN_DURATION_MS);
+    case "TRIGGER_SCAN":
+      // The real background worker responds immediately with this, then
+      // pushes a SCAN_RESULT/ERROR broadcast once the scan actually
+      // finishes (see entrypoints/background.ts) — it does not wait for
+      // a follow-up GET_LATEST_SCAN to hand back the fresh result.
+      // triggerScan() below simulates that broadcast in mock mode.
       return { type: "SCAN_IN_PROGRESS" };
-    }
 
     case "GET_HISTORY": {
       const snapshot = mockScanResult.extensions.find(
@@ -71,15 +66,14 @@ type ScanState =
   | { status: "error"; message: string };
 
 /**
- * Loads the latest scan on mount and exposes a `triggerScan` action that
- * polls until an in-progress scan completes. Backed by mock data until
- * USE_MOCK_DATA is flipped off above.
+ * Loads the latest scan on mount, listens for the background worker's
+ * unsolicited SCAN_RESULT/ERROR broadcast (pushed once a scan completes,
+ * whether triggered by us or by its own alarm), and exposes a
+ * triggerScan action. Backed by mock data until USE_MOCK_DATA is flipped
+ * off above.
  */
 export function useExtensionScan() {
   const [state, setState] = useState<ScanState>({ status: "loading" });
-  const pollTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
 
   const applyResponse = useCallback((response: RuntimeResponse) => {
     if (response.type === "SCAN_RESULT") {
@@ -87,50 +81,11 @@ export function useExtensionScan() {
     } else if (response.type === "ERROR") {
       setState({ status: "error", message: response.message });
     }
-    // SCAN_IN_PROGRESS is handled by the caller (it keeps polling).
+    // SCAN_IN_PROGRESS: nothing to do — wait for the broadcast (or, in
+    // mock mode, the simulated one in triggerScan below).
   }, []);
 
-  // No eager `setState({ status: "loading" })` here: the initial state is
-  // already "loading", and this function is only called synchronously
-  // from the mount effect below (setting state before the first await,
-  // inside an effect, trips the react-hooks set-state-in-effect rule).
-  const fetchLatest = useCallback(async () => {
-    try {
-      const response = await sendRuntimeMessage({ type: "GET_LATEST_SCAN" });
-      applyResponse(response);
-    } catch (err) {
-      setState({
-        status: "error",
-        message: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }, [applyResponse]);
-
-  const triggerScan = useCallback(async () => {
-    setState({ status: "loading" });
-    try {
-      const response = await sendRuntimeMessage({ type: "TRIGGER_SCAN" });
-      if (response.type === "SCAN_IN_PROGRESS") {
-        const poll = async () => {
-          const latest = await sendRuntimeMessage({ type: "GET_LATEST_SCAN" });
-          if (latest.type === "SCAN_RESULT" && !mockScanInFlight) {
-            applyResponse(latest);
-          } else {
-            pollTimeout.current = setTimeout(poll, 500);
-          }
-        };
-        pollTimeout.current = setTimeout(poll, 500);
-      } else {
-        applyResponse(response);
-      }
-    } catch (err) {
-      setState({
-        status: "error",
-        message: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }, [applyResponse]);
-
+  // Initial load on mount.
   useEffect(() => {
     let ignore = false;
     (async () => {
@@ -148,9 +103,47 @@ export function useExtensionScan() {
     })();
     return () => {
       ignore = true;
-      clearTimeout(pollTimeout.current);
     };
   }, [applyResponse]);
 
-  return { state, triggerScan, refetch: fetchLatest };
+  // The background worker pushes SCAN_RESULT/ERROR as an unsolicited
+  // chrome.runtime.sendMessage broadcast, not a response tied to any one
+  // request — so this listener stays registered for the popup's lifetime
+  // rather than only around a triggerScan() call.
+  useEffect(() => {
+    if (USE_MOCK_DATA) return;
+    const listener = (message: RuntimeResponse) => {
+      if (message.type === "SCAN_RESULT" || message.type === "ERROR") {
+        applyResponse(message);
+      }
+    };
+    chrome.runtime.onMessage.addListener(listener);
+    return () => chrome.runtime.onMessage.removeListener(listener);
+  }, [applyResponse]);
+
+  const triggerScan = useCallback(async () => {
+    setState({ status: "loading" });
+    try {
+      const response = await sendRuntimeMessage({ type: "TRIGGER_SCAN" });
+      if (response.type !== "SCAN_IN_PROGRESS") {
+        applyResponse(response);
+        return;
+      }
+      if (USE_MOCK_DATA) {
+        // No real background worker to broadcast completion — simulate one.
+        setTimeout(() => {
+          applyResponse({ type: "SCAN_RESULT", payload: mockScanResult });
+        }, MOCK_SCAN_DURATION_MS);
+      }
+      // Real mode: the persistent onMessage listener above picks up the
+      // eventual broadcast.
+    } catch (err) {
+      setState({
+        status: "error",
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }, [applyResponse]);
+
+  return { state, triggerScan };
 }
