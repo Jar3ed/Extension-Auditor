@@ -15,10 +15,10 @@ export interface ExtensionSnapshot {
   version: string;
   permissions: string[];
   hostPermissions: string[];
-  // Template-literal form, not the enum itself: chrome.management.getAll()
-  // returns installType as a plain string union, and TS enums don't accept
-  // raw string literals even when the value matches. This form is
-  // structurally identical to chrome.management.ExtensionInfo's own field.
+  // Template-literal form (not the bare enum) because chrome.management's
+  // own ExtensionInfo.installType is typed this way — matching it means
+  // real API results and plain string literals ("normal", etc.) both
+  // satisfy this without a cast.
   installType: `${chrome.management.ExtensionInstallType}`;
   enabled: boolean;
   riskScore: number;
