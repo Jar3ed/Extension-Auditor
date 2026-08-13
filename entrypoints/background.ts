@@ -20,11 +20,10 @@ import { scanInstalledExtensions } from "../src/core/scanner";
 import { scoreRisk } from "../src/core/riskScorer";
 import { diffSnapshots } from "../src/core/diff";
 import {
+  getHistories,
   getHistory,
   getLatestScan,
-  getLatestSnapshot,
-  saveScan,
-  saveSnapshot,
+  saveScanAndSnapshots,
 } from "../src/core/storage";
 
 const SCAN_ALARM_NAME = "extsentinel-scan";
@@ -48,19 +47,20 @@ async function ensureScanAlarm(): Promise<void> {
   if (existing && existing.periodInMinutes === periodInMinutes) return;
   chrome.alarms.create(SCAN_ALARM_NAME, {
     periodInMinutes,
-    // Chrome 117+. May need an @ts-expect-error if @types/chrome lags.
     persistAcrossSessions: true,
-  } as chrome.alarms.AlarmCreateInfo);
+  });
 }
 
 /**
- * Runs a full scan pass. Kept sequential and self-contained per extension
- * (score -> diff -> save) rather than batching everything at the end, since
- * the service worker can be killed mid-execution if it looks idle during a
- * slow await.
+ * Runs a full scan pass. History is read for every extension in one
+ * batched call up front, and every extension's updated history plus the
+ * new ScanResult are written in a single batched call at the end — no
+ * chrome.storage.local round trip inside the per-extension loop.
  */
 async function performScan(): Promise<ScanResult> {
   const rawSnapshots = await scanInstalledExtensions();
+  const histories = await getHistories(rawSnapshots.map((raw) => raw.id));
+
   const scored: ExtensionSnapshot[] = [];
   const changes: PermissionChange[] = [];
 
@@ -72,11 +72,10 @@ async function performScan(): Promise<ScanResult> {
     );
     const snapshot: ExtensionSnapshot = { ...raw, riskScore, riskTier };
 
-    const previous = await getLatestSnapshot(snapshot.id);
+    const previous = histories[raw.id]?.at(-1);
     const change = diffSnapshots(previous, snapshot);
     if (change) changes.push(change);
 
-    await saveSnapshot(snapshot);
     scored.push(snapshot);
   }
 
@@ -85,8 +84,26 @@ async function performScan(): Promise<ScanResult> {
     extensions: scored,
     changes,
   };
-  await saveScan(result);
+  await saveScanAndSnapshots(result, scored, histories);
   return result;
+}
+
+let scanInFlight: Promise<ScanResult> | null = null;
+
+/**
+ * Single-flight wrapper around performScan(): the alarm, TRIGGER_SCAN,
+ * and a GET_LATEST_SCAN cache-miss can all want to run a scan around the
+ * same time, and letting them run concurrently let their storage writes
+ * interleave. Every caller now awaits the same in-flight scan instead of
+ * starting a second overlapping one.
+ */
+function runScan(): Promise<ScanResult> {
+  if (!scanInFlight) {
+    scanInFlight = performScan().finally(() => {
+      scanInFlight = null;
+    });
+  }
+  return scanInFlight;
 }
 
 function broadcast(response: RuntimeResponse): void {
@@ -94,6 +111,16 @@ function broadcast(response: RuntimeResponse): void {
     // No listener currently open (e.g. popup closed) — the result is
     // already persisted, so the next GET_LATEST_SCAN picks it up.
   });
+}
+
+/** Runs a scan and broadcasts its outcome (success or failure) once done. */
+function runScanAndBroadcast(): void {
+  runScan()
+    .then((result) => broadcast({ type: "SCAN_RESULT", payload: result }))
+    .catch((error) => {
+      console.error("ExtSentinel scan failed:", error);
+      broadcast({ type: "ERROR", message: String(error) });
+    });
 }
 
 export default defineBackground(() => {
@@ -106,7 +133,7 @@ export default defineBackground(() => {
 
   chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name !== SCAN_ALARM_NAME) return;
-    void performScan();
+    runScanAndBroadcast();
   });
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
@@ -127,7 +154,7 @@ export default defineBackground(() => {
           void (async () => {
             try {
               const existing = await getLatestScan();
-              const result = existing ?? (await performScan());
+              const result = existing ?? (await runScan());
               sendResponse({ type: "SCAN_RESULT", payload: result });
             } catch (error) {
               sendResponse({ type: "ERROR", message: String(error) });
@@ -141,13 +168,7 @@ export default defineBackground(() => {
           // broadcast once the scan finishes, so we don't hold the message
           // port open for the full scan duration.
           sendResponse({ type: "SCAN_IN_PROGRESS" });
-          performScan()
-            .then((result) =>
-              broadcast({ type: "SCAN_RESULT", payload: result }),
-            )
-            .catch((error) =>
-              broadcast({ type: "ERROR", message: String(error) }),
-            );
+          runScanAndBroadcast();
           return false;
         }
 
