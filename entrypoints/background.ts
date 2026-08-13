@@ -48,7 +48,6 @@ async function performScan(): Promise<ScanResult> {
       raw.permissions,
       raw.hostPermissions,
       raw.installType,
-      raw.manifestVersion,
     );
     const snapshot: ExtensionSnapshot = { ...raw, riskScore, riskTier };
 

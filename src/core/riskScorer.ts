@@ -59,7 +59,6 @@ export const SCRIPTING_WEIGHT_WITH_BROAD_HOSTS = 7;
 export const SCRIPTING_WEIGHT_NARROW = 1;
 
 const INSTALL_TYPE_RISK_MULTIPLIER = 1.5;
-const MANIFEST_V2_PENALTY = 5;
 
 const RISK_TIER_MAX_THRESHOLDS: Array<[max: number, tier: ExtensionSnapshot["riskTier"]]> = [
   [9, "low"],
@@ -77,12 +76,7 @@ function scoreToTier(score: number): ExtensionSnapshot["riskTier"] {
 export function scoreRisk(
   permissions: string[],
   hostPermissions: string[],
-  // Typed as the string union chrome.management.getAll() actually returns
-  // (not the ExtensionInstallType enum the shared ExtensionSnapshot type
-  // uses) so callers — including tests — can pass plain string literals.
-  // The enum type is still assignable in, since its values are a subset.
-  installType: `${chrome.management.ExtensionInstallType}`,
-  manifestVersion: number,
+  installType: ExtensionSnapshot["installType"],
 ): Pick<ExtensionSnapshot, "riskScore" | "riskTier"> {
   let score = 0;
 
@@ -109,10 +103,6 @@ export function scoreRisk(
   // directly, so no separate field on the shared type is needed.
   if (installType !== "normal" && installType !== "admin") {
     score *= INSTALL_TYPE_RISK_MULTIPLIER;
-  }
-
-  if (manifestVersion === 2) {
-    score += MANIFEST_V2_PENALTY;
   }
 
   return {
