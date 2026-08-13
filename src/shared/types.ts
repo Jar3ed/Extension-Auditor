@@ -21,7 +21,6 @@ export interface ExtensionSnapshot {
   // satisfy this without a cast.
   installType: `${chrome.management.ExtensionInstallType}`;
   enabled: boolean;
-  manifestVersion: number;
   riskScore: number;
   riskTier: "low" | "medium" | "high" | "critical";
 }
