@@ -26,6 +26,8 @@ ExtSentinel watches for that.
 - _Planned:_ opt-in deep scan of an extension's source/bundle for a more
   thorough risk assessment
 - _Planned:_ scan history per extension
+- _Planned:_ hover tooltips on individual permissions in the drill-down
+  view explaining what that permission actually lets an extension do
 
 ## Tech stack
 
