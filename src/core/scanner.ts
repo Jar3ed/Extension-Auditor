@@ -30,15 +30,21 @@ export async function scanInstalledExtensions(): Promise<ExtensionSnapshot[]> {
         version: extension.version,
         permissions: extension.permissions,
         hostPermissions: extension.hostPermissions,
-        installType: extension.installType,
+        // chrome.management.ExtensionInfo types installType as a plain
+        // string union (`${ExtensionInstallType}`), but the shared
+        // ExtensionSnapshot type declares it as the ExtensionInstallType
+        // enum itself, which TS does not accept raw string literals for.
+        // Cast at this one boundary point rather than editing the shared
+        // contract unilaterally — see commit message / PR description.
+        installType: extension.installType as ExtensionSnapshot["installType"],
         enabled: extension.enabled,
-        // NOTE: chrome.management.ExtensionInfo does not document a
-        // manifestVersion field as of @types/chrome ^0.2.5 — this line may
-        // not type-check. Flagged for discussion (see PR/commit message);
-        // this touches the shared ExtensionSnapshot contract's assumptions,
-        // not just this file.
-        manifestVersion: (extension as unknown as { manifestVersion?: number })
-          .manifestVersion ?? 3,
+        // chrome.management.ExtensionInfo has NO manifestVersion field at
+        // all (confirmed against @types/chrome — not just stale typings).
+        // This isn't a type-only issue like installType above: the data
+        // genuinely isn't available from this API. Hardcoding 3 here means
+        // the MV2 scoring penalty in riskScorer.ts can never fire. Needs a
+        // real decision, not a cast — see commit message / PR description.
+        manifestVersion: 3,
         ...PLACEHOLDER_RISK,
       }),
     );

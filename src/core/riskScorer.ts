@@ -47,7 +47,7 @@ export const PERMISSION_WEIGHTS: Record<string, number> = {
   action: 1,
 };
 
-/** Points per broad ("<all_urls>" or bare "*://*/*") host permission entry. */
+/** Points per broad ("<all_urls>" or bare "*://*" + "/*") host permission entry. */
 export const BROAD_HOST_PERMISSION_WEIGHT = 10;
 
 /**
@@ -77,7 +77,11 @@ function scoreToTier(score: number): ExtensionSnapshot["riskTier"] {
 export function scoreRisk(
   permissions: string[],
   hostPermissions: string[],
-  installType: chrome.management.ExtensionInstallType,
+  // Typed as the string union chrome.management.getAll() actually returns
+  // (not the ExtensionInstallType enum the shared ExtensionSnapshot type
+  // uses) so callers — including tests — can pass plain string literals.
+  // The enum type is still assignable in, since its values are a subset.
+  installType: `${chrome.management.ExtensionInstallType}`,
   manifestVersion: number,
 ): Pick<ExtensionSnapshot, "riskScore" | "riskTier"> {
   let score = 0;

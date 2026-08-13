@@ -9,7 +9,7 @@ function makeSnapshot(overrides: Partial<ExtensionSnapshot> = {}): ExtensionSnap
     version: "1.0.0",
     permissions: ["storage"],
     hostPermissions: [],
-    installType: "normal",
+    installType: "normal" as ExtensionSnapshot["installType"],
     enabled: true,
     manifestVersion: 3,
     riskScore: 1,
