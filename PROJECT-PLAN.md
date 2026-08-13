@@ -4,7 +4,7 @@
 
 ## What we're building
 
-A Manifest V3 Chrome extension that audits a user's *other* installed extensions:
+A Manifest V3 Chrome extension that audits a user's _other_ installed extensions:
 scores each one's permission risk, tracks permission and version changes over
 time to catch supply-chain-style escalation (an extension quietly gaining
 `<all_urls>` access after being sold or compromised), and surfaces all of it
@@ -66,7 +66,7 @@ to get your own work done.
 The background service worker and the popup UI never call each other's
 functions directly — in a Chrome extension they can't. They only ever talk
 through `chrome.runtime.sendMessage` / `onMessage`. That constraint is
-actually a gift here: if you agree on the *shape* of those messages up front,
+actually a gift here: if you agree on the _shape_ of those messages up front,
 you can build your two halves in total isolation and they'll click together
 at the end without either of you reading the other's code.
 
