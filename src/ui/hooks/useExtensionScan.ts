@@ -12,7 +12,7 @@ import type { RuntimeMessage, RuntimeResponse } from "../../shared/messages";
 import type { ScanResult } from "../../shared/types";
 import { mockScanResult } from "../mockData";
 
-const USE_MOCK_DATA = true;
+const USE_MOCK_DATA = false;
 
 const MOCK_LATENCY_MS = 400;
 // How long TRIGGER_SCAN takes to "finish" in the mock, so the UI's
