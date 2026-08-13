@@ -2,9 +2,10 @@
  * Thin messaging layer between the popup/options UI and the background
  * service worker, typed against src/shared/messages.ts.
  *
- * Set USE_MOCK_DATA to false once the real background message handlers
- * exist (see entrypoints/background.ts) — that's the only line that
- * needs to change to swap mock data for the real thing.
+ * USE_MOCK_DATA is off now that entrypoints/background.ts is real and
+ * verified end to end — flip it back to true for offline UI iteration
+ * (e.g. no working background worker loaded) without touching anything
+ * else in this file.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -12,7 +13,7 @@ import type { RuntimeMessage, RuntimeResponse } from "../../shared/messages";
 import type { ScanResult } from "../../shared/types";
 import { mockScanResult } from "../mockData";
 
-const USE_MOCK_DATA = true;
+const USE_MOCK_DATA = false;
 
 const MOCK_LATENCY_MS = 400;
 // How long TRIGGER_SCAN takes to "finish" in the mock, so the UI's
