@@ -1,19 +1,48 @@
 /**
  * Permission-escalation detection.
  *
- * TODO: Compare a newly scanned ExtensionSnapshot against the previously
- * stored snapshot for the same extension id. If permissions or
- * hostPermissions grew, or the version changed with new grants, emit a
- * PermissionChange record.
- * TODO: This is the core of the supply-chain-attack detection feature —
- * keep it conservative (no false negatives on added host permissions).
+ * Flags a change whenever:
+ *  - the version string changed AND permissions or hostPermissions grew, or
+ *  - a newly-broad host permission (<all_urls> / bare "*://*\/*") appears,
+ *    regardless of whether the version changed.
+ *
+ * A version bump with a permission increase is the highest-value signal
+ * this tool produces, so this stays conservative: no false negatives on
+ * added host permissions.
  */
 
 import type { ExtensionSnapshot, PermissionChange } from "../shared/types";
+import { isBroadHostPermission } from "./hostPatterns";
+
+function added(previous: string[], current: string[]): string[] {
+  const previousSet = new Set(previous);
+  return current.filter((entry) => !previousSet.has(entry));
+}
 
 export function diffSnapshots(
-  _previous: ExtensionSnapshot | undefined,
-  _current: ExtensionSnapshot,
+  previous: ExtensionSnapshot | undefined,
+  current: ExtensionSnapshot,
 ): PermissionChange | null {
-  throw new Error("TODO: not implemented");
+  if (!previous) return null; // nothing to compare against yet
+
+  const addedPermissions = added(previous.permissions, current.permissions);
+  const addedHostPermissions = added(previous.hostPermissions, current.hostPermissions);
+
+  const versionChanged = current.version !== previous.version;
+  const grew = addedPermissions.length > 0 || addedHostPermissions.length > 0;
+  const newlyBroadHostAccess = addedHostPermissions.some(isBroadHostPermission);
+
+  if (!((versionChanged && grew) || newlyBroadHostAccess)) {
+    return null;
+  }
+
+  return {
+    extensionId: current.id,
+    extensionName: current.name,
+    addedPermissions,
+    addedHostPermissions,
+    previousVersion: previous.version,
+    newVersion: current.version,
+    detectedAt: Date.now(),
+  };
 }
