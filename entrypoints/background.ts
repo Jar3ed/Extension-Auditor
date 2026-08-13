@@ -7,7 +7,15 @@
  */
 
 import type { RuntimeMessage, RuntimeResponse } from "../src/shared/messages";
-import type { ExtensionSnapshot, PermissionChange, ScanResult } from "../src/shared/types";
+import type {
+  ExtensionSnapshot,
+  PermissionChange,
+  ScanResult,
+} from "../src/shared/types";
+import {
+  DEFAULT_SCAN_INTERVAL_MINUTES,
+  SCAN_INTERVAL_STORAGE_KEY,
+} from "../src/shared/settings";
 import { scanInstalledExtensions } from "../src/core/scanner";
 import { scoreRisk } from "../src/core/riskScorer";
 import { diffSnapshots } from "../src/core/diff";
@@ -20,13 +28,26 @@ import {
 } from "../src/core/storage";
 
 const SCAN_ALARM_NAME = "extsentinel-scan";
-const DEFAULT_SCAN_INTERVAL_MINUTES = 60;
 
+async function getScanIntervalMinutes(): Promise<number> {
+  const stored = await chrome.storage.local.get(SCAN_INTERVAL_STORAGE_KEY);
+  const value = stored[SCAN_INTERVAL_STORAGE_KEY];
+  return typeof value === "number" ? value : DEFAULT_SCAN_INTERVAL_MINUTES;
+}
+
+/**
+ * Creates the scan alarm if missing, or reschedules it if the configured
+ * interval (chrome.storage.local, written by the options page) no longer
+ * matches the alarm's current period. chrome.alarms.create replaces any
+ * existing alarm with the same name, so this is safe to call whenever the
+ * setting changes, not just on install/startup.
+ */
 async function ensureScanAlarm(): Promise<void> {
+  const periodInMinutes = await getScanIntervalMinutes();
   const existing = await chrome.alarms.get(SCAN_ALARM_NAME);
-  if (existing) return;
+  if (existing && existing.periodInMinutes === periodInMinutes) return;
   chrome.alarms.create(SCAN_ALARM_NAME, {
-    periodInMinutes: DEFAULT_SCAN_INTERVAL_MINUTES,
+    periodInMinutes,
     // Chrome 117+. May need an @ts-expect-error if @types/chrome lags.
     persistAcrossSessions: true,
   } as chrome.alarms.AlarmCreateInfo);
@@ -88,6 +109,13 @@ export default defineBackground(() => {
     void performScan();
   });
 
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== "local") return;
+    if (SCAN_INTERVAL_STORAGE_KEY in changes) {
+      void ensureScanAlarm();
+    }
+  });
+
   chrome.runtime.onMessage.addListener(
     (
       message: RuntimeMessage,
@@ -114,7 +142,9 @@ export default defineBackground(() => {
           // port open for the full scan duration.
           sendResponse({ type: "SCAN_IN_PROGRESS" });
           performScan()
-            .then((result) => broadcast({ type: "SCAN_RESULT", payload: result }))
+            .then((result) =>
+              broadcast({ type: "SCAN_RESULT", payload: result }),
+            )
             .catch((error) =>
               broadcast({ type: "ERROR", message: String(error) }),
             );

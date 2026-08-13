@@ -1,20 +1,24 @@
 /**
  * Settings page. Currently just the scan interval control, persisted to
- * chrome.storage.local under its own key. Not wired to the background
- * alarm yet (see entrypoints/background.ts TODOs) — that happens once
- * both halves of the project are merged.
+ * chrome.storage.local under SCAN_INTERVAL_STORAGE_KEY. The background
+ * worker listens for changes to that key and reschedules its alarm
+ * accordingly (see entrypoints/background.ts).
  */
 
 import { useEffect, useState } from "react";
-
-const STORAGE_KEY = "scanIntervalMinutes";
-const DEFAULT_INTERVAL_MINUTES = 60;
-const MIN_INTERVAL_MINUTES = 30;
-const MAX_INTERVAL_MINUTES = 360;
+import {
+  DEFAULT_SCAN_INTERVAL_MINUTES,
+  MAX_SCAN_INTERVAL_MINUTES,
+  MIN_SCAN_INTERVAL_MINUTES,
+  SCAN_INTERVAL_STORAGE_KEY,
+} from "../../src/shared/settings";
 
 function clamp(value: number): number {
-  if (Number.isNaN(value)) return DEFAULT_INTERVAL_MINUTES;
-  return Math.min(MAX_INTERVAL_MINUTES, Math.max(MIN_INTERVAL_MINUTES, value));
+  if (Number.isNaN(value)) return DEFAULT_SCAN_INTERVAL_MINUTES;
+  return Math.min(
+    MAX_SCAN_INTERVAL_MINUTES,
+    Math.max(MIN_SCAN_INTERVAL_MINUTES, value),
+  );
 }
 
 export default function App() {
@@ -24,11 +28,11 @@ export default function App() {
   useEffect(() => {
     let ignore = false;
     (async () => {
-      const stored = await chrome.storage.local.get(STORAGE_KEY);
+      const stored = await chrome.storage.local.get(SCAN_INTERVAL_STORAGE_KEY);
       if (!ignore) {
-        const value = stored[STORAGE_KEY];
+        const value = stored[SCAN_INTERVAL_STORAGE_KEY];
         setMinutes(
-          typeof value === "number" ? value : DEFAULT_INTERVAL_MINUTES,
+          typeof value === "number" ? value : DEFAULT_SCAN_INTERVAL_MINUTES,
         );
       }
     })();
@@ -40,7 +44,7 @@ export default function App() {
   useEffect(() => {
     if (minutes === null) return;
     const handle = setTimeout(() => {
-      chrome.storage.local.set({ [STORAGE_KEY]: minutes });
+      chrome.storage.local.set({ [SCAN_INTERVAL_STORAGE_KEY]: minutes });
     }, 300);
     return () => clearTimeout(handle);
   }, [minutes]);
@@ -58,15 +62,16 @@ export default function App() {
         </label>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
           How often ExtSentinel checks your installed extensions for permission
-          changes, in minutes ({MIN_INTERVAL_MINUTES}–{MAX_INTERVAL_MINUTES}).
+          changes, in minutes ({MIN_SCAN_INTERVAL_MINUTES}–
+          {MAX_SCAN_INTERVAL_MINUTES}).
         </p>
 
         <div className="mt-2 flex items-center gap-2">
           <input
             id="scan-interval"
             type="number"
-            min={MIN_INTERVAL_MINUTES}
-            max={MAX_INTERVAL_MINUTES}
+            min={MIN_SCAN_INTERVAL_MINUTES}
+            max={MAX_SCAN_INTERVAL_MINUTES}
             step={15}
             disabled={minutes === null}
             value={minutes ?? ""}
