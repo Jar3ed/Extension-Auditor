@@ -35,10 +35,11 @@ by `registration.ts` — **do not** change them to `defineContentScript` with
 
 ## Known limits
 
-- "Deny all" and "Only necessary" differ only in which button is preferred and
-  in the CMP keys' optional categories. A banner can't stop a site setting
-  cookies it deems strictly necessary; truly blocking cookies would break
-  logins and isn't attempted.
+- "Deny all" and "Only necessary" behave identically except for which banner
+  button is preferred ("Reject all" vs "Only necessary") when both exist; the
+  CMP keys written are the same. A banner can't stop a site setting cookies it
+  deems strictly necessary; truly blocking cookies would break logins and
+  isn't attempted.
 - CMP selectors and key formats are best-effort and can go stale; the text scan
   is the safety net. Formats we can't generate faithfully (IAB TCF
   `euconsent-v2`, Didomi tokens) are deliberately not written.
