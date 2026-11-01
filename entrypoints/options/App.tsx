@@ -84,6 +84,20 @@ export default function App() {
           </span>
         </div>
       </div>
+
+      <div className="mt-8 border-t border-slate-200 pt-4 dark:border-slate-700">
+        <a
+          href="cookies.html"
+          target="_blank"
+          rel="noreferrer"
+          className="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
+        >
+          Cookie preferences →
+        </a>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          Automatically accept, reject or limit cookie banners on websites.
+        </p>
+      </div>
     </div>
   );
 }
