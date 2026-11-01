@@ -22,5 +22,13 @@ export default defineConfig({
     // Tier 2 (deep scan) feature — do not add host_permissions here.
     // That will be requested at runtime via optional_host_permissions
     // once the opt-in deep-scan feature exists.
+    //
+    // Cookie-consent automation follows the same rule: everything it needs
+    // is optional, requested from a user gesture on the cookie settings page
+    // only when the user switches from "manual" to "automatic". Manual (the
+    // default) therefore adds no install-time warnings, and updating from an
+    // older build can't disable the extension pending re-approval.
+    optional_permissions: ["scripting", "declarativeNetRequestWithHostAccess"],
+    optional_host_permissions: ["http://*/*", "https://*/*"],
   },
 });

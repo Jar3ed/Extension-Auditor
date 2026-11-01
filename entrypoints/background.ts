@@ -16,6 +16,11 @@ import {
   DEFAULT_SCAN_INTERVAL_MINUTES,
   SCAN_INTERVAL_STORAGE_KEY,
 } from "../src/shared/settings";
+import {
+  COOKIE_SETTINGS_STORAGE_KEY,
+  parseCookieSettings,
+} from "../src/cookies/preferences";
+import { syncCookieAutomation } from "../src/cookies/registration";
 import { scanInstalledExtensions } from "../src/core/scanner";
 import { scoreRisk } from "../src/core/riskScorer";
 import { diffSnapshots } from "../src/core/diff";
@@ -88,6 +93,18 @@ async function performScan(): Promise<ScanResult> {
   return result;
 }
 
+/** Brings the cookie-consent scripts/rules in line with the saved settings. */
+async function syncCookieSettings(): Promise<void> {
+  try {
+    const stored = await chrome.storage.local.get(COOKIE_SETTINGS_STORAGE_KEY);
+    await syncCookieAutomation(
+      parseCookieSettings(stored[COOKIE_SETTINGS_STORAGE_KEY]),
+    );
+  } catch (error) {
+    console.error("ExtSentinel cookie automation sync failed:", error);
+  }
+}
+
 let scanInFlight: Promise<ScanResult> | null = null;
 
 /**
@@ -124,12 +141,21 @@ function runScanAndBroadcast(): void {
 }
 
 export default defineBackground(() => {
+  // Dynamic content-script registrations don't reliably survive an
+  // extension update, so re-sync on install/update as well as on startup.
   chrome.runtime.onInstalled.addListener(() => {
     void ensureScanAlarm();
+    void syncCookieSettings();
   });
   chrome.runtime.onStartup.addListener(() => {
     void ensureScanAlarm();
+    void syncCookieSettings();
   });
+
+  // Revoking the permissions from chrome://extensions must switch the
+  // feature off for real, not leave stale registrations behind.
+  chrome.permissions.onAdded.addListener(() => void syncCookieSettings());
+  chrome.permissions.onRemoved.addListener(() => void syncCookieSettings());
 
   chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name !== SCAN_ALARM_NAME) return;
@@ -140,6 +166,9 @@ export default defineBackground(() => {
     if (areaName !== "local") return;
     if (SCAN_INTERVAL_STORAGE_KEY in changes) {
       void ensureScanAlarm();
+    }
+    if (COOKIE_SETTINGS_STORAGE_KEY in changes) {
+      void syncCookieSettings();
     }
   });
 
